@@ -8,9 +8,12 @@
 #include <sys/wait.h>
 #include <sys/ipc.h> //shared memory
 #include <sys/shm.h> //shared memory
-
-#define MAX 21
-
+#include <time.h> //local time
+#include <sys/time.h>
+#define MAX 20
+pid_t all_cProcess[MAX];
+int seg_id, *seg_p;
+//char *ofile= "cstest";
 //Allocate shared memory
 int createSharedMemory() {
 	//Create shared memory segment
@@ -51,6 +54,51 @@ void removeSharedMemory(int *shmp, int shmid) {
      	 	exit(1);
    }
 }
+
+void siginit_handler () {
+	printf("Ctrl C triggered\n");
+	removeSharedMemory(seg_p,seg_id);
+	exit(1);
+
+}
+void alarm_handler () {
+	//Kill all processes if exceeds time limit
+	for (int i=0; i<MAX; i++) {
+        	kill(all_cProcess[i],SIGTERM);
+        } 
+       removeSharedMemory(seg_p,seg_id);
+	exit(1);	
+}
+void forkProcess(int n_process,int sec) {
+	char num[2];
+	int timeout = 0;
+	int child_done = 0;
+	//pid_t * children = (int*) malloc(n * sizeof(pid_t));
+	/*if(children == NULL){
+		fprintf(stderr,"%s: ",prog);
+		perror("Error:");
+		exit(EXIT_FAILURE);
+	}*/
+		//printf("%d",n);
+		
+	
+	 for (int i=0;i<n_process;i++) {
+		pid_t pid = fork();
+		if (pid<0) {
+			fprintf(stderr, "Error: Fork failed");
+			exit(EXIT_FAILURE);
+		} else if (pid == 0) {  	//Child process
+			sprintf(num,"%d",n_process);
+			execl("slave", num, NULL);
+
+		} else {			//Parent process
+			all_cProcess[i]=pid;
+
+		}
+	}
+	while(wait(NULL) > 0);	
+}
+
 int validNum(char* sec){
 	int size = strlen(sec);
 	int i = 0;
@@ -66,37 +114,9 @@ int main(int argc, char *argv[])
 {	
 	int sec=100;
 	int n_process=-1;
-	int option,seg_id, *seg_p;	
-/*	if (argc<2) {
-		fprintf(stderr,"%s: Error: Invalid command. Please type: ./master -h for HELP\n",argv[0]);
-		exit(1);
-	} else {
-	       	if(argv[1][0]!='-'){
-			fprintf(stderr,"%s: Error: Invalid command. Please type: ./master -h for HELP\n",argv[0]);
-			exit(1);
-		}	
-		while ((opt = getopt(argc,argv, "ht:")) != -1) {
-			switch (opt) {
-				case 'h':
-					printf("%s -h: Help menu\n",argv[0]);
-					printf("Command: ./master -t ss n\n");
-					printf("ss: Maximum time in seconds after which the process should terminate itself if not completed (Default: 100)\n");
-					printf("n: The maximum processes that the program runs at a time\n");
-					exit(1);
-				case 't':
-					n_process= atoi(argv[3]);
-					sec=atoi(argv[2]);
-					printf("Second:%d\n",sec);
-					printf("Second:%d\n",n_process);
-					break;
-				case '?': 
-					fprintf(stderr,"%s: Error: Unknown option %c\n",argv[0],optopt);
-					exit(1);
-			}
-		}
-	}
-
-*/
+	int option;
+	FILE *file;	
+	signal(SIGINT, siginit_handler);
 	
 	while(optind < argc){
 		if ((option = getopt(argc,argv, "ht:")) !=-1) {
@@ -134,14 +154,8 @@ int main(int argc, char *argv[])
 					if(n_process >MAX) {
 						fprintf(stderr,"%s: Error: Number of processes exceeds 20\n",argv[0]);
                 				exit(1);
-					} else {
-					//MAIN CODE
-						seg_id=createSharedMemory();
-						printf("%d",seg_id);	
-						seg_p=attachSharedMemory(seg_id);
-						removeSharedMemory(seg_p,seg_id);
-
 					}
+
 				} else {
                                        fprintf(stderr,"%s: ERROR: %s is not a valid number\n",argv[0],argv[optind]);
                                        return EXIT_FAILURE;
@@ -156,10 +170,26 @@ int main(int argc, char *argv[])
 		}
 		
 	}
-
+	//printf("%d",n_process);
+	signal(SIGALRM, alarm_handler);
+        alarm(sec);
 	if (n_process ==-1) {
 		fprintf(stderr,"%s: Error: Missing number of processes\n",argv[0]);
 		exit(1);
-	}
+	} 
+	//Validate if number of processes doesn't exceed 20
+        else if (n_process >MAX || n_process <1) {
+        	fprintf(stderr,"%s: Error: Number of processes needs to be from 1-20\n",argv[0]);
+                exit(1);
+        } 
+	//MAIN CODE
+	seg_id=createSharedMemory();
+        seg_p=attachSharedMemory(seg_id);
+ 
+	
+	forkProcess(n_process,sec);
+	sleep(10);
+       	removeSharedMemory(seg_p,seg_id);
+        
 	return 0;
 }

@@ -1,8 +1,10 @@
 CC = gcc
 CFLAGS = -I -g
-all: master
-main: master.o 
+all: master slave
+master: master.o 
 	$(CC) $(CFLAGS) master.c -o master
+slave: slave.o
+	$(CC) $(CFLAGS) slave.c -o slave
 
 clean:  
-	rm -f master *.o *.dat a.out
+	rm -f master slave *.o  a.out cstest
