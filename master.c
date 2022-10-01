@@ -10,10 +10,62 @@
 #include <sys/shm.h> //shared memory
 #include <time.h> //local time
 #include <sys/time.h>
-#define MAX 20
-pid_t all_cProcess[MAX];
+#include "config.h"
+pid_t all_cProcess[MAX_PROCESS];
 int seg_id, *seg_p;
-//char *ofile= "cstest";
+/*enum state{idle,want_in,in_cs};
+int turn;
+enum state flag[MAX_PROCESS];
+
+void process (int i, char * n) {
+	int j;
+	i=i+1;
+	printf("%s",n);
+	char numP[2]; //Process number
+	int num=atoi(n); //Number of process
+	sprintf(numP,"%d",i);
+	do{
+		do {
+			flag[i] = want_in;
+			j=turn;
+			while (j!=i) {
+				if (flag[j]!=idle) {
+					j=turn;
+				} else {
+					j=(j+1)%num;
+				}
+			}
+			//Declare intention to enter critical section
+			flag[i] = in_cs;
+
+			//Check that no one else is in critical section
+			for (j=0;j<num;j++){ 
+				if ((j!=i) && (flag[j]== in_cs)) {
+					break;
+				}
+			}
+
+		} while(j<num || (turn != i && flag[turn]!= idle));
+	
+		//Enter critical section
+		turn =i;
+		printf("%s",numP);
+		execl("slave", numP, NULL);
+
+		//Exit critical section
+		j= (turn+1) %num;
+		while (flag[j]==idle) {
+			j= (j+1)%num;
+
+		}
+
+		//Assign turn to next waiting process
+		turn =j;
+		flag[i]=idle;	
+		
+	}while(1);
+}
+*/
 //Allocate shared memory
 int createSharedMemory() {
 	//Create shared memory segment
@@ -55,15 +107,20 @@ void removeSharedMemory(int *shmp, int shmid) {
    }
 }
 
+//Interrupt signal (^C) 
 void siginit_handler () {
-	printf("Ctrl C triggered\n");
+	printf("-Ctrl C triggered\n");
 	removeSharedMemory(seg_p,seg_id);
 	exit(1);
 
 }
+
+//Signal when the program runs more than time limit
 void alarm_handler () {
+	perror("Error: Exceed time limit");
+	//fprintf(stderr,"Error: Exceed time limit\n");
 	//Kill all processes if exceeds time limit
-	for (int i=0; i<MAX; i++) {
+	for (int i=0; i<MAX_PROCESS; i++) {
         	kill(all_cProcess[i],SIGTERM);
         } 
        removeSharedMemory(seg_p,seg_id);
@@ -71,8 +128,10 @@ void alarm_handler () {
 }
 void forkProcess(int n_process,int sec) {
 	char num[2];
+	char nProcess[2];
 	int timeout = 0;
 	int child_done = 0;
+	
 	//pid_t * children = (int*) malloc(n * sizeof(pid_t));
 	/*if(children == NULL){
 		fprintf(stderr,"%s: ",prog);
@@ -80,17 +139,16 @@ void forkProcess(int n_process,int sec) {
 		exit(EXIT_FAILURE);
 	}*/
 		//printf("%d",n);
-		
-	
-	 for (int i=0;i<n_process;i++) {
+	sprintf(nProcess,"%d",n_process);	
+	for (int i=0;i<n_process;i++) {
+		sprintf(num,"%d",i);
 		pid_t pid = fork();
 		if (pid<0) {
 			fprintf(stderr, "Error: Fork failed");
-			exit(EXIT_FAILURE);
+			//exit(EXIT_FAILURE);
+			exit(1);
 		} else if (pid == 0) {  	//Child process
-			sprintf(num,"%d",n_process);
-			execl("slave", num, NULL);
-
+			execl("slave",num,nProcess,NULL);
 		} else {			//Parent process
 			all_cProcess[i]=pid;
 
@@ -151,7 +209,7 @@ int main(int argc, char *argv[])
 					n_process = atoi(argv[optind]);	
 					//printf("%d\n",n_process);
 					//Validate if number of processes doesn't exceed 20
-					if(n_process >MAX) {
+					if(n_process >MAX_PROCESS) {
 						fprintf(stderr,"%s: Error: Number of processes exceeds 20\n",argv[0]);
                 				exit(1);
 					}
@@ -173,12 +231,13 @@ int main(int argc, char *argv[])
 	//printf("%d",n_process);
 	signal(SIGALRM, alarm_handler);
         alarm(sec);
+
 	if (n_process ==-1) {
 		fprintf(stderr,"%s: Error: Missing number of processes\n",argv[0]);
 		exit(1);
 	} 
 	//Validate if number of processes doesn't exceed 20
-        else if (n_process >MAX || n_process <1) {
+        else if (n_process >MAX_PROCESS || n_process <1) {
         	fprintf(stderr,"%s: Error: Number of processes needs to be from 1-20\n",argv[0]);
                 exit(1);
         } 
@@ -188,7 +247,6 @@ int main(int argc, char *argv[])
  
 	
 	forkProcess(n_process,sec);
-	sleep(10);
        	removeSharedMemory(seg_p,seg_id);
         
 	return 0;

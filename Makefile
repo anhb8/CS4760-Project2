@@ -7,4 +7,4 @@ slave: slave.o
 	$(CC) $(CFLAGS) slave.c -o slave
 
 clean:  
-	rm -f master slave *.o  a.out cstest
+	rm -f master slave *.o  a.out cstest logfile.*
