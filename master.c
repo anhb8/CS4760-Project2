@@ -12,106 +12,51 @@
 #include <sys/time.h>
 #include "config.h"
 pid_t all_cProcess[MAX_PROCESS];
-int seg_id, *seg_p;
-/*enum state{idle,want_in,in_cs};
-int turn;
-enum state flag[MAX_PROCESS];
+int shmid;
+struct sharedM *shmp;
+FILE *lfile; //Log file
 
-void process (int i, char * n) {
-	int j;
-	i=i+1;
-	printf("%s",n);
-	char numP[2]; //Process number
-	int num=atoi(n); //Number of process
-	sprintf(numP,"%d",i);
-	do{
-		do {
-			flag[i] = want_in;
-			j=turn;
-			while (j!=i) {
-				if (flag[j]!=idle) {
-					j=turn;
-				} else {
-					j=(j+1)%num;
-				}
-			}
-			//Declare intention to enter critical section
-			flag[i] = in_cs;
-
-			//Check that no one else is in critical section
-			for (j=0;j<num;j++){ 
-				if ((j!=i) && (flag[j]== in_cs)) {
-					break;
-				}
-			}
-
-		} while(j<num || (turn != i && flag[turn]!= idle));
-	
-		//Enter critical section
-		turn =i;
-		printf("%s",numP);
-		execl("slave", numP, NULL);
-
-		//Exit critical section
-		j= (turn+1) %num;
-		while (flag[j]==idle) {
-			j= (j+1)%num;
-
-		}
-
-		//Assign turn to next waiting process
-		turn =j;
-		flag[i]=idle;	
-		
-	}while(1);
-}
-*/
 //Allocate shared memory
 int createSharedMemory() {
 	//Create shared memory segment
-	key_t SHM_KEY;
-	int shmid;
-	shmid=shmget(SHM_KEY, sizeof(int), 0644|IPC_CREAT);
+	shmid=shmget(SHM_KEY, sizeof(struct sharedM), 0644|IPC_CREAT);
 	if (shmid == -1) {
-      		perror("Error:shmid");
-      		exit(1);
+      		perror("Error:shmget");
+      		exit(EXIT_FAILURE);
    	}
 	
 	return shmid;
 }
 
 //Attach the process to shared memory segment just created - pointer
-int *attachSharedMemory(int shmid) {
-	int *shmp;
-	shmp=(int *) shmat(shmid, NULL, 0);
-	if (shmp == (int *) -1) {
-      		perror("Error:shmp");
-      		exit(1);
+void *attachSharedMemory() {
+	shmp=(struct sharedM *) shmat(shmid, NULL, 0);
+	if (shmp == (struct sharedM *) -1) {
+      		perror("Error:shmat");
+      		exit(EXIT_FAILURE);
    	}	
-	return shmp;
-
 }
 
 //Deallocate shared memory
-void removeSharedMemory(int *shmp, int shmid) {
+void removeSharedMemory() {
 	//Detach the process
 	 if (shmdt(shmp) == -1) {
       		perror("Error: shmdt");
-      		exit(1);
+      		exit(EXIT_FAILURE);
    	}
 
 	//Remove shared memory segment
 	if (shmctl(shmid, IPC_RMID, 0) == -1) {
       		perror("Error: shmctl");
-     	 	exit(1);
+     	 	exit(EXIT_FAILURE);
    }
 }
 
 //Interrupt signal (^C) 
 void siginit_handler () {
 	printf("-Ctrl C triggered\n");
-	removeSharedMemory(seg_p,seg_id);
-	exit(1);
+	removeSharedMemory();
+	exit(EXIT_FAILURE);
 
 }
 
@@ -123,15 +68,16 @@ void alarm_handler () {
 	for (int i=0; i<MAX_PROCESS; i++) {
         	kill(all_cProcess[i],SIGTERM);
         } 
-       removeSharedMemory(seg_p,seg_id);
+       removeSharedMemory();
 	exit(1);	
 }
+
 void forkProcess(int n_process,int sec) {
 	char num[2];
 	char nProcess[2];
-	int timeout = 0;
-	int child_done = 0;
 	
+	//lfile=fopen(logfile,"a");
+
 	//pid_t * children = (int*) malloc(n * sizeof(pid_t));
 	/*if(children == NULL){
 		fprintf(stderr,"%s: ",prog);
@@ -145,16 +91,20 @@ void forkProcess(int n_process,int sec) {
 		pid_t pid = fork();
 		if (pid<0) {
 			fprintf(stderr, "Error: Fork failed");
-			//exit(EXIT_FAILURE);
-			exit(1);
+			removeSharedMemory();
+			exit(EXIT_FAILURE);
+			
 		} else if (pid == 0) {  	//Child process
+			
 			execl("slave",num,nProcess,NULL);
 		} else {			//Parent process
 			all_cProcess[i]=pid;
 
 		}
 	}
-	while(wait(NULL) > 0);	
+	while(wait(NULL) > 0);
+
+	//fclose(lfile);	
 }
 
 int validNum(char* sec){
@@ -242,12 +192,12 @@ int main(int argc, char *argv[])
                 exit(1);
         } 
 	//MAIN CODE
-	seg_id=createSharedMemory();
-        seg_p=attachSharedMemory(seg_id);
+	createSharedMemory();
+        attachSharedMemory();
  
 	
 	forkProcess(n_process,sec);
-       	removeSharedMemory(seg_p,seg_id);
+       	removeSharedMemory();
         
 	return 0;
 }
