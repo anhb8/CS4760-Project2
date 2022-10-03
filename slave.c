@@ -69,21 +69,6 @@ void exitMessage(int n){
 	fclose(file);
 }
 
-void message(int n) {
-        file=fopen(ofile,"a");
-        
-        gettimeofday(&now, NULL);
-        local = localtime(&now.tv_sec);
-
-        //Write to output file
-        fprintf(file,"%02d:%02d:%02d File modified by process number %d\n",local->tm_hour, local->tm_min, local->tm_sec,n);
-        
-	
-	fclose(file);
-
-	
-}
-
 void process (const int i,int num) {
         int j;
 	srand(time(0)+i);

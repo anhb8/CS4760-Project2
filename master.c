@@ -14,7 +14,13 @@
 pid_t all_cProcess[MAX_PROCESS];
 int shmid;
 struct sharedM *shmp;
-FILE *lfile; //Log file
+FILE *file; //Log file
+
+char logfile[10]="logfile.";
+char logNum[3]; //Process number
+struct timeval  now;
+struct tm* local;
+int n_process=-1;
 
 //Allocate shared memory
 int createSharedMemory() {
@@ -54,57 +60,68 @@ void removeSharedMemory() {
 
 //Interrupt signal (^C) 
 void siginit_handler () {
+	file=fopen("logfile","a");
 	printf("-Ctrl C triggered\n");
+	for (int i=0; i<n_process; i++) {
+                gettimeofday(&now, NULL);
+        	local = localtime(&now.tv_sec);
+		kill(all_cProcess[i],SIGTERM);
+                fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,i);
+        
+	}
 	removeSharedMemory();
+	fclose(file);
 	exit(EXIT_FAILURE);
 
 }
 
+
 //Signal when the program runs more than time limit
 void alarm_handler () {
-	perror("Error: Exceed time limit");
-	//fprintf(stderr,"Error: Exceed time limit\n");
+	file=fopen("logfile","a");
+	fprintf(stderr,"Error: Exceed time limit\n");
+	
 	//Kill all processes if exceeds time limit
-	for (int i=0; i<MAX_PROCESS; i++) {
-        	kill(all_cProcess[i],SIGTERM);
+	for (int i=0; i<n_process; i++) {
+        	gettimeofday(&now, NULL);
+        	local = localtime(&now.tv_sec);
+		kill(all_cProcess[i],SIGTERM); 
+		fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,i);
         } 
-       removeSharedMemory();
-	exit(1);	
+	fclose(file);
+        removeSharedMemory();
+	exit(EXIT_FAILURE);	
 }
 
 void forkProcess(int n_process,int sec) {
 	char num[2];
 	char nProcess[2];
-	
-	//lfile=fopen(logfile,"a");
-
-	//pid_t * children = (int*) malloc(n * sizeof(pid_t));
-	/*if(children == NULL){
-		fprintf(stderr,"%s: ",prog);
-		perror("Error:");
-		exit(EXIT_FAILURE);
-	}*/
-		//printf("%d",n);
+	int i;
 	sprintf(nProcess,"%d",n_process);	
-	for (int i=0;i<n_process;i++) {
+	for (i=0;i<n_process;i++) {
 		sprintf(num,"%d",i);
 		pid_t pid = fork();
 		if (pid<0) {
-			fprintf(stderr, "Error: Fork failed");
+			perror("Error: Fork failed");
 			removeSharedMemory();
 			exit(EXIT_FAILURE);
 			
 		} else if (pid == 0) {  	//Child process
-			
 			execl("slave",num,nProcess,NULL);
 		} else {			//Parent process
 			all_cProcess[i]=pid;
 
 		}
 	}
-	while(wait(NULL) > 0);
+	while(wait(NULL) > 0) {
 
-	//fclose(lfile);	
+	//Terminated succesfully 
+	file=fopen("logfile","a");
+	gettimeofday(&now, NULL);
+	local = localtime(&now.tv_sec);
+	fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,i);
+	fclose(file);
+	}	
 }
 
 int validNum(char* sec){
@@ -121,7 +138,6 @@ int validNum(char* sec){
 int main(int argc, char *argv[])
 {	
 	int sec=100;
-	int n_process=-1;
 	int option;
 	FILE *file;	
 	signal(SIGINT, siginit_handler);
@@ -136,7 +152,7 @@ int main(int argc, char *argv[])
 					printf("./master n              Default maximum time:100\n");
                                         printf("\nss: Maximum time in seconds after which the process should terminate itself if not completed (Default: 100)\n");
                                         printf("n: The maximum processes that the program runs at a time (From 1-20)\n");
-					exit(1);
+					exit(EXIT_FAILURE);
 
 				case 't':
 					if(validNum(optarg)){
@@ -157,7 +173,7 @@ int main(int argc, char *argv[])
 			if(n_process == -1) {
 				if(validNum(argv[optind])) {
 					n_process = atoi(argv[optind]);	
-					//printf("%d\n",n_process);
+					
 					//Validate if number of processes doesn't exceed 20
 					if(n_process >MAX_PROCESS) {
 						fprintf(stderr,"%s: Error: Number of processes exceeds 20\n",argv[0]);
@@ -189,7 +205,7 @@ int main(int argc, char *argv[])
 	//Validate if number of processes doesn't exceed 20
         else if (n_process >MAX_PROCESS || n_process <1) {
         	fprintf(stderr,"%s: Error: Number of processes needs to be from 1-20\n",argv[0]);
-                exit(1);
+                exit(EXIT_FAILURE);
         } 
 	//MAIN CODE
 	createSharedMemory();

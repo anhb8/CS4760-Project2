@@ -1,18 +1,25 @@
 CC = gcc
 CFLAGS = -I -g
-OBJECTS= main.o master.o slave.o
-SRC= config.h
 
-all: master slave
+MASTER=master
+SLAVE=slave
+
+OBJ1= master.o 
+OBJ2=slave.o
+
+SRC= config.h
+OUTPUT=$(MASTER) $(SLAVE)
+
+all: $(OUTPUT) 
 
 %.o: %.c $(SRC)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-master: master.o $(SRC)
-	$(CC) $(CFLAGS) master.o -o master
+$(MASTER)): $(OBJ1) 
+	$(CC) $(CFLAGS) $(OBJ1) -o $(MASTER)
 	
-slave: slave.o $(SRC)
-	$(CC) $(CFLAGS) slave.o -o slave
+$(SLAVE): $(OBJ2)
+	$(CC) $(CFLAGS) $(OBJ2) -o $(SLAVE)
 
 clean:  
-	rm -f master slave *.o  a.out cstest logfile.* 
+	rm -f $(OUTPUT) *.o  cstest logfile* 
